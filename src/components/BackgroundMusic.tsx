@@ -15,13 +15,17 @@ export const BackgroundMusic = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Ensure audio is always unmuted (speaker mode) on load
+    audio.muted = false;
+    setIsMuted(false);
     audio.volume = 0; // Start at 0 for fade-in
     audio.loop = true;
     audio.crossOrigin = "anonymous";
 
     // Fade-in effect for a soft, gentle start
     const fadeIn = () => {
-      const targetVolume = isMuted ? 0 : volume;
+      // Always use volume (not muted) for speaker mode
+      const targetVolume = volume;
       const fadeInterval = setInterval(() => {
         if (audio.volume < targetVolume) {
           audio.volume = Math.min(audio.volume + 0.05, targetVolume);
@@ -31,33 +35,58 @@ export const BackgroundMusic = () => {
       }, 100);
     };
 
-    // Try to play when user interacts with the page
+    // Fallback handler for user interaction if autoplay fails
     const handleUserInteraction = () => {
-      if (!isPlaying && audio.paused) {
+      if (audio.paused) {
+        // Ensure unmuted before playing
+        audio.muted = false;
+        setIsMuted(false);
         audio.play()
           .then(() => {
-            fadeIn(); // Gentle fade-in when music starts
+            setIsPlaying(true);
+            fadeIn();
           })
           .catch(() => {
-            // Autoplay was prevented, user will need to click play
+            // Still failed, user will need to click play button
           });
       }
     };
 
-    // Listen for any user interaction
-    window.addEventListener("click", handleUserInteraction, { once: true });
-    window.addEventListener("touchstart", handleUserInteraction, { once: true });
+    // Try to auto-play immediately when component loads
+    const attemptAutoplay = async () => {
+      try {
+        // Ensure unmuted before playing
+        audio.muted = false;
+        setIsMuted(false);
+        await audio.play();
+        setIsPlaying(true);
+        fadeIn(); // Gentle fade-in when music starts
+      } catch (error) {
+        // Autoplay was prevented by browser policy
+        // Fall back to playing on user interaction
+        window.addEventListener("click", handleUserInteraction, { once: true });
+        window.addEventListener("touchstart", handleUserInteraction, { once: true });
+      }
+    };
+
+    // Small delay to ensure audio is ready, then attempt autoplay
+    const timer = setTimeout(() => {
+      attemptAutoplay();
+    }, 500);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("click", handleUserInteraction);
       window.removeEventListener("touchstart", handleUserInteraction);
     };
-  }, [isPlaying, volume, isMuted]);
+  }, [volume]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Ensure audio is always unmuted (speaker mode)
+    audio.muted = isMuted;
     audio.volume = isMuted ? 0 : volume;
   }, [volume, isMuted]);
 
@@ -115,6 +144,8 @@ export const BackgroundMusic = () => {
         ref={audioRef}
         src={musicSrc}
         preload="auto"
+        autoPlay
+        muted={false}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
